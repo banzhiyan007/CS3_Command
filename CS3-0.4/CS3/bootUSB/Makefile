@@ -1,0 +1,4 @@
+OUTPUT_LOD:=1
+BTCPU_ROM:=0
+FLASH_BOOT_OFFSET:=0xd0000
+include $(TARGET_ROOT)/default.mk

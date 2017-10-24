@@ -1,0 +1,29 @@
+#ifndef PRN_ENGINE_CMD_H
+#define PRN_ENGINE_CMD_H
+
+enum LINE_CMD
+{
+	LINE_CMD_FEED					=0x20,
+	LINE_CMD_FEED_BACKWARD			=0x21,
+	LINE_CMD_PRINT					=0x10,
+	LINE_CMD_DELAY					=0x5A,
+	LINE_CMD_DARKNESS               =0xA6,
+	LINE_CMD_SPEED                  =0xA7,
+	LINE_CMD_DEFAULT_DARKNESS		=0xA8,
+//	LINE_CMD_SELECT_HEAD            =0x1A,
+//	LINE_CMD_PRINT_HIGH_PRECISE		=0x12,
+//	LINE_CMD_CUT_PAPER				=0x30,
+//	LINE_CMD_REG_INFO				=0x52,
+//	LINE_CMD_GET_MARK_HIS           =0xE0,
+};
+
+enum MARK_INDEX
+{
+	MARK_LABEL				=0x01,
+	MARK_L					=0x02,
+	MARK_R					=0x04,
+	MARK_R1					=0x08,
+};
+
+#endif
+

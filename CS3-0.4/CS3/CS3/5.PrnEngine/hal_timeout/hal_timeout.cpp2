@@ -1,0 +1,91 @@
+#include <mbed.h>
+extern "C"
+{
+#include "cs_types.h"
+#include "chip_id.h"
+#include "global_macros.h"
+#include "dma.h"
+#include "halp_irq.h"
+#include "hal_dma.h"
+#include "hal_sys.h"
+#include "sys_irq.h"
+#include "halp_sys_ifc.h"
+#include "gpio.h"
+#include "hal_gpio.h"
+#include "spi.h"
+#include "hal_spi.h"
+};
+static void gpio_set_mux(PinName pin,HAL_GPIO_ALTFUNC_CFG_ID_T cfg)
+{
+	HAL_GPIO_GPIO_ID_T p=(HAL_GPIO_GPIO_ID_T)(0x10020000+((pin/256)<<3)+((pin%256)&0x07));
+	hal_GpioSetPinMux(p, cfg);
+}
+
+extern int spi_dma_ch;
+static void (*save_timeout_isr)(void);
+
+void hal_timeout_start(int us);
+static void timeout_isr(void)
+{
+	while(!(hwp_spi2->status&SPI_TX_DMA_DONE));
+	while((hwp_spi2->status&SPI_TX_SPACE_MASK)!=SPI_TX_SPACE(0x10));
+	while(!(hwp_spi2->status&SPI_TX_TH));
+	hwp_sysIfc->std_ch[spi_dma_ch].control|=SYS_IFC_DISABLE;
+
+	hwp_spi2->irq = 0;
+	hwp_spi2->status=0xFFFFFFFF;
+	gpio_set_mux(P1_0, HAL_GPIO_ALTFUNC_CFG_2);
+	gpio_set_mux(P1_3, HAL_GPIO_ALTFUNC_CFG_2);
+	save_timeout_isr();
+}
+
+extern void (*gSpiIrqHandler)(void);
+void hal_timeout_init(void (*isr)(void))
+{
+	save_timeout_isr=isr;
+	hwp_sysIrq->Mask_Set    = SYS_IRQ_SYS_IRQ_SPI2;
+	gSpiIrqHandler=timeout_isr;
+}
+
+static uint32_t src;
+void hal_timeout_start(int us)
+{
+	gpio_set_mux(P1_0, HAL_GPIO_ALTFUNC_CFG_0);
+	gpio_set_mux(P1_3, HAL_GPIO_ALTFUNC_CFG_0);
+	hwp_spi2->irq = SPI_MASK_TX_DMA_IRQ;
+	hwp_sysIfc->std_ch[spi_dma_ch].start_addr  =  (UINT32)0xa1c80000;//&src;
+	hwp_sysIfc->std_ch[spi_dma_ch].tc          =  us*2-us/2;
+	hwp_sysIfc->std_ch[spi_dma_ch].control	   |=  SYS_IFC_ENABLE;
+}
+
+extern void (*g_halDmaRegistry)(void);
+static void (*dma_isr)(void);
+
+static void hal_dma_isr(void)
+{
+	hwp_dma->control = DMA_INT_DONE_CLEAR;
+	dma_isr();
+}
+
+void hal_timeout1_init(void (*isr)(void))
+{
+	g_halDmaRegistry=hal_dma_isr;
+	dma_isr=isr;
+	hal_SysRequestFreq((HAL_SYS_FREQ_USER_ID_T)17, HAL_SYS_FREQ_26M, NULL);
+	hwp_sysIrq->Mask_Set = SYS_IRQ_SYS_IRQ_DMA;
+}
+
+void hal_timeout1_start(int us)
+{
+	static uint32_t src,dst;
+	uint32_t count=(us<<5)-us;
+	if(count>0x3FFFF)count=0x3FFFF;
+	hwp_dma->src_addr = (UINT32)&src;
+	hwp_dma->dst_addr = (UINT32)&dst;
+	hwp_dma->xfer_size = DMA_TRANSFER_SIZE(count);
+	hwp_dma->control = DMA_DST_ADDR_MGT_CONST_ADDR | DMA_ENABLE | DMA_INT_DONE_MASK | DMA_INT_DONE_CLEAR;
+	{
+		// Flush the CPU write buffer.
+		UINT32 unused __attribute__((unused)) = hwp_dma->control;
+	}
+}
